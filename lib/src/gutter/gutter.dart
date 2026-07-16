@@ -16,11 +16,13 @@ const _issueColumn = 1;
 const _foldingColumn = 2;
 
 class GutterWidget extends StatelessWidget {
-  const GutterWidget({
-    required this.codeController,
-    required this.style,
-    required this.scrollController,
-  });
+  final Function(int index)? onLineNumberTab;
+
+  const GutterWidget(
+      {required this.codeController,
+      required this.style,
+      required this.scrollController,
+      this.onLineNumberTab});
 
   final CodeController codeController;
   final GutterStyle style;
@@ -98,10 +100,15 @@ class GutterWidget extends StatelessWidget {
         continue;
       }
 
-      tableRows[lineIndex].children![_lineNumberColumn] = Text(
-        style.showLineNumbers ? '${i + 1}' : ' ',
-        style: style.textStyle,
-        textAlign: style.textAlign,
+      tableRows[lineIndex].children![_lineNumberColumn] = GestureDetector(
+        onTap: () {
+          onLineNumberTab?.call(i);
+        },
+        child: Text(
+          style.showLineNumbers ? '${i + 1}' : ' ',
+          style: style.textStyle,
+          textAlign: style.textAlign,
+        ),
       );
     }
   }

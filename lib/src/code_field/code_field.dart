@@ -181,6 +181,8 @@ class CodeField extends StatefulWidget {
 
   final GutterStyle gutterStyle;
 
+  final Function(int index)? onLineNumberTab;
+
   const CodeField({
     super.key,
     required this.controller,
@@ -203,6 +205,7 @@ class CodeField extends StatefulWidget {
     this.lineNumberBuilder,
     this.focusNode,
     this.onChanged,
+    this.onLineNumberTab,
     @Deprecated('Use gutterStyle instead') this.lineNumbers,
     @Deprecated('Use gutterStyle instead')
     this.lineNumberStyle = const GutterStyle(),
@@ -217,12 +220,14 @@ class CodeField extends StatefulWidget {
   State<CodeField> createState() => _CodeFieldState();
 }
 
-class _CodeFieldState extends State<CodeField> {
+class _CodeFieldState extends State<CodeField>
+    with AutomaticKeepAliveClientMixin {
   // Add a controller
   LinkedScrollControllerGroup? _controllers;
   ScrollController? _numberScroll;
   ScrollController? _codeScroll;
   ScrollController? _horizontalCodeScroll;
+  ScrollController? _verticalScrollController;
   final _codeFieldKey = GlobalKey();
 
   OverlayEntry? _suggestionsPopup;
@@ -242,6 +247,47 @@ class _CodeFieldState extends State<CodeField> {
   final _editorKey = GlobalKey();
   Offset? _editorOffset;
 
+  /// 滚动到指定行
+  Future scrollToLine(int lineNumber) async {
+    if (lineNumber < 1 || _codeScroll == null) return;
+
+    // 计算目标行的 Y 位置
+    final lineHeight = _calculateLineHeight();
+    final targetOffset = (lineNumber - 1) * lineHeight;
+
+    // 动画滚动到目标行
+    await _codeScroll!.animateTo(
+      targetOffset.clamp(0, _codeScroll!.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  /// 计算单行高度
+  double _calculateLineHeight() {
+    final textPainter = TextPainter(
+      text: TextSpan(text: 'A', style: textStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    return textPainter.height;
+  }
+
+  ///滚动到对应位置
+  Future scrollToOffset(Offset offset) async {
+    await _codeScroll?.animateTo(
+      offset.dy,
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.ease,
+    );
+
+    await _horizontalCodeScroll?.animateTo(
+      offset.dx,
+      duration: const Duration(milliseconds: 50),
+      curve: Curves.ease,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -249,13 +295,24 @@ class _CodeFieldState extends State<CodeField> {
     _numberScroll = _controllers?.addAndGet();
     _codeScroll = _controllers?.addAndGet();
 
+    _controllers?.addOffsetChangedListener(() {
+      widget.controller.vScrollOffset = _controllers?.offset ?? 0;
+    });
+
+    widget.controller.onScrollToLine = scrollToLine;
+    widget.controller.onScrollToOffset = scrollToOffset;
+
     widget.controller.addListener(_onTextChanged);
-    widget.controller.addListener(_updatePopupOffset);
-    widget.controller.popupController.addListener(_onPopupStateChanged);
+    // widget.controller.addListener(_updatePopupOffset);
+    // widget.controller.popupController.addListener(_onPopupStateChanged);
     widget.controller.searchController.addListener(
       _onSearchControllerChange,
     );
     _horizontalCodeScroll = ScrollController();
+    _horizontalCodeScroll?.addListener(() {
+      widget.controller.hScrollOffset = _horizontalCodeScroll?.offset ?? 0;
+    });
+
     _focusNode = widget.focusNode ?? FocusNode();
     _focusNode!.attach(context, onKeyEvent: _onKeyEvent);
 
@@ -272,6 +329,9 @@ class _CodeFieldState extends State<CodeField> {
       final double width = _codeFieldKey.currentContext!.size!.width;
       final double height = _codeFieldKey.currentContext!.size!.height;
       windowSize = Size(width, height);
+
+      _codeScroll?.jumpTo(widget.controller.vScrollOffset);
+      _horizontalCodeScroll?.jumpTo(widget.controller.hScrollOffset);
     });
     _onTextChanged();
   }
@@ -282,10 +342,11 @@ class _CodeFieldState extends State<CodeField> {
 
   @override
   void dispose() {
+    widget.controller.onScrollToLine = null;
     widget.controller.searchController.codeFieldFocusNode = null;
     widget.controller.removeListener(_onTextChanged);
-    widget.controller.removeListener(_updatePopupOffset);
-    widget.controller.popupController.removeListener(_onPopupStateChanged);
+    // widget.controller.removeListener(_updatePopupOffset);
+    // widget.controller.popupController.removeListener(_onPopupStateChanged);
     _suggestionsPopup?.remove();
     widget.controller.searchController.removeListener(
       _onSearchControllerChange,
@@ -302,16 +363,16 @@ class _CodeFieldState extends State<CodeField> {
   void didUpdateWidget(covariant CodeField oldWidget) {
     super.didUpdateWidget(oldWidget);
     oldWidget.controller.removeListener(_onTextChanged);
-    oldWidget.controller.removeListener(_updatePopupOffset);
-    oldWidget.controller.popupController.removeListener(_onPopupStateChanged);
+    // oldWidget.controller.removeListener(_updatePopupOffset);
+    // oldWidget.controller.popupController.removeListener(_onPopupStateChanged);
     oldWidget.controller.searchController.removeListener(
       _onSearchControllerChange,
     );
 
     widget.controller.searchController.codeFieldFocusNode = _focusNode;
     widget.controller.addListener(_onTextChanged);
-    widget.controller.addListener(_updatePopupOffset);
-    widget.controller.popupController.addListener(_onPopupStateChanged);
+    // widget.controller.addListener(_updatePopupOffset);
+    // widget.controller.popupController.addListener(_onPopupStateChanged);
     widget.controller.searchController.addListener(
       _onSearchControllerChange,
     );
@@ -336,6 +397,10 @@ class _CodeFieldState extends State<CodeField> {
   }
 
   void _onTextChanged() {
+    if (widget.controller.value.composing.isValid) {
+      return;
+    }
+
     // Rebuild line number
     final str = widget.controller.text.split('\n');
     final buf = <String>[];
@@ -390,6 +455,7 @@ class _CodeFieldState extends State<CodeField> {
     );
 
     return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
       padding: EdgeInsets.only(
         right: widget.padding.right,
       ),
@@ -447,6 +513,9 @@ class _CodeFieldState extends State<CodeField> {
       enabled: widget.enabled,
       onChanged: widget.onChanged,
       readOnly: widget.readOnly,
+      showCursor: true,
+      // contextMenuBuilder: null,
+      // contextMenuBuilder: (_, __) => const SizedBox.shrink(),
     );
 
     final editingField = Theme(
@@ -455,6 +524,10 @@ class _CodeFieldState extends State<CodeField> {
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
+          if (constraints.maxWidth <= 0) {
+            return const SizedBox.shrink();
+          }
+
           // Control horizontal scrolling
           return _wrapInScrollView(codeField, textStyle, constraints.maxWidth);
         },
@@ -507,23 +580,24 @@ class _CodeFieldState extends State<CodeField> {
       codeController: widget.controller,
       style: gutterStyle,
       scrollController: _numberScroll,
+      onLineNumberTab: widget.onLineNumberTab,
     );
   }
 
-  void _updatePopupOffset() {
-    final textPainter = _getTextPainter(widget.controller.text);
-    final caretHeight = _getCaretHeight(textPainter);
+  // void _updatePopupOffset() {
+  //   final textPainter = _getTextPainter(widget.controller.text);
+  //   final caretHeight = _getCaretHeight(textPainter);
 
-    final leftOffset = _getPopupLeftOffset(textPainter);
-    final normalTopOffset = _getPopupTopOffset(textPainter, caretHeight);
-    final flippedTopOffset = normalTopOffset -
-        (Sizes.autocompletePopupMaxHeight + caretHeight + Sizes.caretPadding);
+  //   final leftOffset = _getPopupLeftOffset(textPainter);
+  //   final normalTopOffset = _getPopupTopOffset(textPainter, caretHeight);
+  //   final flippedTopOffset = normalTopOffset -
+  //       (Sizes.autocompletePopupMaxHeight + caretHeight + Sizes.caretPadding);
 
-    setState(() {
-      _normalPopupOffset = Offset(leftOffset, normalTopOffset);
-      _flippedPopupOffset = Offset(leftOffset, flippedTopOffset);
-    });
-  }
+  //   setState(() {
+  //     _normalPopupOffset = Offset(leftOffset, normalTopOffset);
+  //     _flippedPopupOffset = Offset(leftOffset, flippedTopOffset);
+  //   });
+  // }
 
   TextPainter _getTextPainter(String text) {
     return TextPainter(
@@ -569,22 +643,22 @@ class _CodeFieldState extends State<CodeField> {
     );
   }
 
-  void _onPopupStateChanged() {
-    final shouldShow =
-        widget.controller.popupController.shouldShow && windowSize != null;
-    if (!shouldShow) {
-      _suggestionsPopup?.remove();
-      _suggestionsPopup = null;
-      return;
-    }
+  // void _onPopupStateChanged() {
+  //   final shouldShow =
+  //       widget.controller.popupController.shouldShow && windowSize != null;
+  //   if (!shouldShow) {
+  //     _suggestionsPopup?.remove();
+  //     _suggestionsPopup = null;
+  //     return;
+  //   }
 
-    if (_suggestionsPopup == null) {
-      _suggestionsPopup = _buildSuggestionOverlay();
-      Overlay.of(context).insert(_suggestionsPopup!);
-    }
+  //   if (_suggestionsPopup == null) {
+  //     _suggestionsPopup = _buildSuggestionOverlay();
+  //     Overlay.of(context).insert(_suggestionsPopup!);
+  //   }
 
-    _suggestionsPopup!.markNeedsBuild();
-  }
+  //   _suggestionsPopup!.markNeedsBuild();
+  // }
 
   void _onSearchControllerChange() {
     final shouldShow = widget.controller.searchController.shouldShow;
@@ -650,20 +724,23 @@ class _CodeFieldState extends State<CodeField> {
         textTheme.titleSmall?.color;
   }
 
-  OverlayEntry _buildSuggestionOverlay() {
-    return OverlayEntry(
-      builder: (context) {
-        return Popup(
-          normalOffset: _normalPopupOffset,
-          flippedOffset: _flippedPopupOffset,
-          controller: widget.controller.popupController,
-          editingWindowSize: windowSize!,
-          style: textStyle,
-          backgroundColor: _backgroundCol,
-          parentFocusNode: _focusNode!,
-          editorOffset: _editorOffset,
-        );
-      },
-    );
-  }
+  // OverlayEntry _buildSuggestionOverlay() {
+  //   return OverlayEntry(
+  //     builder: (context) {
+  //       return Popup(
+  //         normalOffset: _normalPopupOffset,
+  //         flippedOffset: _flippedPopupOffset,
+  //         controller: widget.controller.popupController,
+  //         editingWindowSize: windowSize!,
+  //         style: textStyle,
+  //         backgroundColor: _backgroundCol,
+  //         parentFocusNode: _focusNode!,
+  //         editorOffset: _editorOffset,
+  //       );
+  //     },
+  //   );
+  // }
+
+  @override
+  bool get wantKeepAlive => true;
 }

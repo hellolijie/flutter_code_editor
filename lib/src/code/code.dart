@@ -278,6 +278,20 @@ class Code {
     };
   }
 
+  TextSelection? getSelectionForLineRange(int startLine, int endLine) {
+    if (startLine < 0 || endLine >= lines.lines.length || startLine > endLine) {
+      return null;
+    }
+
+    final startRange = lines.lines[startLine].textRange;
+    final endRange = lines.lines[endLine].textRange;
+
+    return TextSelection(
+      baseOffset: startRange.start,
+      extentOffset: endRange.end,
+    );
+  }
+
   /// Returns whether the current selection has any read-only part.
   bool isReadOnlySelected(TextRange range) {
     if (range.start == -1 && range.end == -1) {

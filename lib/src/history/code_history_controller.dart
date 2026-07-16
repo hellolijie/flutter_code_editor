@@ -29,6 +29,7 @@ class CodeHistoryController {
   final CodeController codeController;
   Code lastCode;
   TextSelection lastSelection;
+  Offset lastScrollOffset;
   int _currentRecordIndex = 0;
   bool _wasTextChanged = false;
   Timer? _debounceTimer;
@@ -42,13 +43,16 @@ class CodeHistoryController {
   CodeHistoryController({
     required this.codeController,
   })  : lastCode = codeController.code,
-        lastSelection = codeController.value.selection {
+        lastSelection = codeController.value.selection,
+        lastScrollOffset =
+            Offset(codeController.hScrollOffset, codeController.vScrollOffset) {
     _push();
   }
 
   void beforeCodeControllerValueChanged({
     required Code code,
     required TextSelection selection,
+    required Offset scrollOffset,
     required bool isTextChanging,
   }) {
     if (isTextChanging) {
@@ -70,12 +74,14 @@ class CodeHistoryController {
         _push();
         lastCode = code;
         lastSelection = selection;
+        lastScrollOffset = scrollOffset;
         _push();
         break;
 
       case HistoryControllerAction.newEntryAfterEdit:
         lastCode = code;
         lastSelection = selection;
+        lastScrollOffset = scrollOffset;
         _push();
         break;
 
@@ -83,6 +89,7 @@ class CodeHistoryController {
         _setTimer();
         lastCode = code;
         lastSelection = selection;
+        lastScrollOffset = scrollOffset;
         break;
     }
   }
@@ -215,6 +222,7 @@ class CodeHistoryController {
     return CodeHistoryRecord(
       code: lastCode,
       selection: lastSelection,
+      scrollOffset: lastScrollOffset,
     );
   }
 

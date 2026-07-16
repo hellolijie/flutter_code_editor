@@ -36,6 +36,12 @@ import 'search_result_highlighted_builder.dart';
 import 'span_builder.dart';
 
 class CodeController extends TextEditingController {
+  /// 滚动到指定行的回调，由 CodeField 设置
+  void Function(int lineNumber)? onScrollToLine;
+
+  ///滚动到对应位置
+  Future Function(Offset offset)? onScrollToOffset;
+
   Mode? _language;
 
   /// A highlight language to parse the text with
@@ -102,7 +108,7 @@ class CodeController extends TextEditingController {
 
   final _styleList = <TextStyle>[];
   final _modifierMap = <String, CodeModifier>{};
-  late PopupController popupController;
+  // late PopupController popupController;
   final autocompleter = Autocompleter();
   late final historyController = CodeHistoryController(codeController: this);
 
@@ -126,6 +132,9 @@ class CodeController extends TextEditingController {
   TextSpan? lastTextSpan;
 
   bool _disposed = false;
+
+  double vScrollOffset = 0;
+  double hScrollOffset = 0;
 
   late final actions = <Type, Action<Intent>>{
     CommentUncommentIntent: CommentUncommentAction(controller: this),
@@ -192,7 +201,7 @@ class CodeController extends TextEditingController {
       _styleList.addAll(patternMap!.values);
     }
 
-    popupController = PopupController(onCompletionSelected: insertSelectedWord);
+    // popupController = PopupController(onCompletionSelected: insertSelectedWord);
 
     unawaited(analyzeCode());
   }
@@ -242,6 +251,10 @@ class CodeController extends TextEditingController {
     analysisResult = result;
     _lastAnalyzedText = codeSentToAnalysis.text;
     notifyListeners();
+  }
+
+  void scrollToLine(int lineNumber) {
+    onScrollToLine?.call(lineNumber);
   }
 
   void setLanguage(
@@ -330,99 +343,99 @@ class CodeController extends TextEditingController {
       return KeyEventResult.handled;
     }
 
-    if (popupController.shouldShow) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        popupController.scrollByArrow(ScrollDirection.up);
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        popupController.scrollByArrow(ScrollDirection.down);
-        return KeyEventResult.handled;
-      }
-    }
+    // if (popupController.shouldShow) {
+    //   if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+    //     popupController.scrollByArrow(ScrollDirection.up);
+    //     return KeyEventResult.handled;
+    //   }
+    //   if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+    //     popupController.scrollByArrow(ScrollDirection.down);
+    //     return KeyEventResult.handled;
+    //   }
+    // }
 
     return KeyEventResult.ignored; // The framework will handle.
   }
 
   void onEnterKeyAction() {
-    if (popupController.shouldShow) {
-      insertSelectedWord();
-      return;
-    }
+    // if (popupController.shouldShow) {
+    //   insertSelectedWord();
+    //   return;
+    // }
 
-    final currentMatchIndex =
-        _searchNavigationController.value.currentMatchIndex;
+    // final currentMatchIndex =
+    //     _searchNavigationController.value.currentMatchIndex;
 
-    if (searchController.shouldShow && currentMatchIndex != null) {
-      final fullSelection = code.hiddenRanges.recoverSelection(selection);
-      final currentMatch = fullSearchResult.matches[currentMatchIndex];
+    // if (searchController.shouldShow && currentMatchIndex != null) {
+    //   final fullSelection = code.hiddenRanges.recoverSelection(selection);
+    //   final currentMatch = fullSearchResult.matches[currentMatchIndex];
 
-      if (fullSelection.start == currentMatch.start &&
-          fullSelection.end == currentMatch.end) {
-        _searchNavigationController.moveNext();
-        return;
-      }
-    }
+    //   if (fullSelection.start == currentMatch.start &&
+    //       fullSelection.end == currentMatch.end) {
+    //     _searchNavigationController.moveNext();
+    //     return;
+    //   }
+    // }
 
     insertStr('\n');
   }
 
   void onTabKeyAction() {
-    if (popupController.shouldShow) {
-      insertSelectedWord();
-      return;
-    }
+    // if (popupController.shouldShow) {
+    //   insertSelectedWord();
+    //   return;
+    // }
 
     insertStr(' ' * params.tabSpaces);
   }
 
   /// Inserts the word selected from the list of completions
-  void insertSelectedWord() {
-    final previousSelection = selection;
-    final selectedWord = popupController.getSelectedWord();
-    final startPosition = value.wordAtCursorStart;
-    final currentWord = value.wordAtCursor;
+  // void insertSelectedWord() {
+  //   final previousSelection = selection;
+  //   final selectedWord = popupController.getSelectedWord();
+  //   final startPosition = value.wordAtCursorStart;
+  //   final currentWord = value.wordAtCursor;
 
-    if (startPosition == null || currentWord == null) {
-      popupController.hide();
-      return;
-    }
+  //   if (startPosition == null || currentWord == null) {
+  //     popupController.hide();
+  //     return;
+  //   }
 
-    final endReplacingPosition = startPosition + currentWord.length;
-    final endSelectionPosition = startPosition + selectedWord.length;
+  //   final endReplacingPosition = startPosition + currentWord.length;
+  //   final endSelectionPosition = startPosition + selectedWord.length;
 
-    var additionalSpaceIfEnd = '';
-    var offsetIfEndsWithSpace = 1;
-    if (text.length < endReplacingPosition + 1) {
-      additionalSpaceIfEnd = ' ';
-    } else {
-      final charAfterText = text[endReplacingPosition];
-      if (charAfterText != ' ' &&
-          !StringUtil.isDigit(charAfterText) &&
-          !StringUtil.isLetterEng(charAfterText)) {
-        // ex. case ';' or other finalizer, or symbol
-        offsetIfEndsWithSpace = 0;
-      }
-    }
+  //   var additionalSpaceIfEnd = '';
+  //   var offsetIfEndsWithSpace = 1;
+  //   if (text.length < endReplacingPosition + 1) {
+  //     additionalSpaceIfEnd = ' ';
+  //   } else {
+  //     final charAfterText = text[endReplacingPosition];
+  //     if (charAfterText != ' ' &&
+  //         !StringUtil.isDigit(charAfterText) &&
+  //         !StringUtil.isLetterEng(charAfterText)) {
+  //       // ex. case ';' or other finalizer, or symbol
+  //       offsetIfEndsWithSpace = 0;
+  //     }
+  //   }
 
-    final replacedText = text.replaceRange(
-      startPosition,
-      endReplacingPosition,
-      '$selectedWord$additionalSpaceIfEnd',
-    );
+  //   final replacedText = text.replaceRange(
+  //     startPosition,
+  //     endReplacingPosition,
+  //     '$selectedWord$additionalSpaceIfEnd',
+  //   );
 
-    final adjustedSelection = previousSelection.copyWith(
-      baseOffset: endSelectionPosition + offsetIfEndsWithSpace,
-      extentOffset: endSelectionPosition + offsetIfEndsWithSpace,
-    );
+  //   final adjustedSelection = previousSelection.copyWith(
+  //     baseOffset: endSelectionPosition + offsetIfEndsWithSpace,
+  //     extentOffset: endSelectionPosition + offsetIfEndsWithSpace,
+  //   );
 
-    value = TextEditingValue(
-      text: replacedText,
-      selection: adjustedSelection,
-    );
+  //   value = TextEditingValue(
+  //     text: replacedText,
+  //     selection: adjustedSelection,
+  //   );
 
-    popupController.hide();
-  }
+  //   popupController.hide();
+  // }
 
   String get fullText => _code.text;
 
@@ -443,6 +456,11 @@ class CodeController extends TextEditingController {
 
   @override
   set value(TextEditingValue newValue) {
+    if (newValue.composing.isValid) {
+      super.value = newValue;
+      return;
+    }
+
     final hasTextChanged = newValue.text != super.value.text;
     final hasSelectionChanged = newValue.selection != super.value.selection;
 
@@ -503,6 +521,7 @@ class CodeController extends TextEditingController {
       code: _code,
       selection: newValue.selection,
       isTextChanging: hasTextChanged,
+      scrollOffset: Offset(hScrollOffset, vScrollOffset),
     );
 
     super.value = newValue;
@@ -510,13 +529,16 @@ class CodeController extends TextEditingController {
     if (hasTextChanged) {
       autocompleter.blacklist = [newValue.wordAtCursor ?? ''];
       autocompleter.setText(this, text);
-      unawaited(generateSuggestions());
+      // unawaited(generateSuggestions());
     } else if (hasSelectionChanged) {
-      popupController.hide();
+      // popupController.hide();
     }
   }
 
-  void applyHistoryRecord(CodeHistoryRecord record) {
+  void applyHistoryRecord(CodeHistoryRecord record){
+
+    // await onScrollToOffset?.call(record.scrollOffset);
+
     _code = record.code.foldedAs(_code);
     final fullSelection =
         record.code.hiddenRanges.recoverSelection(record.selection);
@@ -526,6 +548,7 @@ class CodeController extends TextEditingController {
       text: code.visibleText,
       selection: cutSelection,
     );
+    
   }
 
   void outdentSelection() {
@@ -740,6 +763,7 @@ class CodeController extends TextEditingController {
       code: _code,
       selection: finalVisibleSelection,
       isTextChanging: true,
+      scrollOffset: Offset(hScrollOffset, vScrollOffset),
     );
 
     super.value = TextEditingValue(
@@ -812,22 +836,22 @@ class CodeController extends TextEditingController {
     return text;
   }
 
-  Future<void> generateSuggestions() async {
-    final prefix = value.wordToCursor;
-    if (prefix == null) {
-      popupController.hide();
-      return;
-    }
+  // Future<void> generateSuggestions() async {
+  //   final prefix = value.wordToCursor;
+  //   if (prefix == null) {
+  //     popupController.hide();
+  //     return;
+  //   }
 
-    final suggestions =
-        (await autocompleter.getSuggestions(prefix)).toList(growable: false);
+  //   final suggestions =
+  //       (await autocompleter.getSuggestions(prefix)).toList(growable: false);
 
-    if (suggestions.isNotEmpty) {
-      popupController.show(suggestions);
-    } else {
-      popupController.hide();
-    }
-  }
+  //   if (suggestions.isNotEmpty) {
+  //     popupController.show(suggestions);
+  //   } else {
+  //     popupController.hide();
+  //   }
+  // }
 
   void foldAt(int line) {
     final newCode = _code.foldedAt(line);
@@ -957,15 +981,15 @@ class CodeController extends TextEditingController {
   }
 
   void dismiss() {
-    _dismissSuggestions();
+    // _dismissSuggestions();
     _dismissSearch();
   }
 
-  void _dismissSuggestions() {
-    if (popupController.enabled) {
-      popupController.hide();
-    }
-  }
+  // void _dismissSuggestions() {
+  //   if (popupController.enabled) {
+  //     popupController.hide();
+  //   }
+  // }
 
   void _dismissSearch() {
     searchController.hideSearch(returnFocusToCodeField: true);
