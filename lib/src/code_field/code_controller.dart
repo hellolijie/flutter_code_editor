@@ -20,8 +20,6 @@ import '../search/result.dart';
 import '../search/search_navigation_controller.dart';
 import '../search/settings_controller.dart';
 import '../single_line_comments/parser/single_line_comments.dart';
-import '../util/string_util.dart';
-import '../wip/autocomplete/popup_controller.dart';
 import 'actions/comment_uncomment.dart';
 import 'actions/copy.dart';
 import 'actions/dismiss.dart';

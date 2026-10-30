@@ -3,6 +3,7 @@ include: package:total_lints/app.yaml
 analyzer:
   exclude:
     - lib/src/wip
+    - build/**
 
 linter: 
   rules:

@@ -515,7 +515,8 @@ class _CodeFieldState extends State<CodeField>
       readOnly: widget.readOnly,
       showCursor: true,
       // contextMenuBuilder: null,
-      // contextMenuBuilder: (_, __) => const SizedBox.shrink(),
+      contextMenuBuilder: (_, __) => const SizedBox.shrink(),
+      enableInteractiveSelection: true,
     );
 
     final editingField = Theme(
